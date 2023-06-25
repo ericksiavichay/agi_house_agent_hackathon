@@ -1,11 +1,7 @@
 import pygame, sys, time, random
+import numpy as np
 
 # Difficulty settings
-# Easy      ->  10
-# Medium    ->  25
-# Hard      ->  40
-# Harder    ->  60
-# Impossible->  120
 difficulty = 25
 
 # Window size
@@ -14,8 +10,6 @@ frame_size_y = 480
 
 # Checks for errors encountered
 check_errors = pygame.init()
-# pygame.init() example output -> (6, 0)
-# second number in tuple gives number of errors
 if check_errors[1] > 0:
     print(f"[!] Had {check_errors[1]} errors when initialising game, exiting...")
     sys.exit(-1)
@@ -78,8 +72,7 @@ def game_over():
     show_score(0, red, "times", 20)
     pygame.display.flip()
     time.sleep(3)
-    pygame.quit()
-    sys.exit()
+    return True
 
 
 # Score
@@ -103,8 +96,30 @@ def is_safe(pos, other_snake):
     return True
 
 
+def ai_move(snake2_pos, food_pos):
+    x_diff = food_pos[0] - snake2_pos[0][0]
+    y_diff = food_pos[1] - snake2_pos[0][1]
+    if x_diff > 0:
+        return "RIGHT"
+    elif x_diff < 0:
+        return "LEFT"
+    elif y_diff > 0:
+        return "DOWN"
+    elif y_diff < 0:
+        return "UP"
+
+
+def reset_snake2(snake_pos):
+    while True:
+        x = random.randrange(1, (frame_size_x // 10)) * 10
+        y = random.randrange(1, (frame_size_y // 10)) * 10
+        if np.abs(x - snake_pos[0][0]) > 10 and np.abs(y - snake_pos[0][1]) > 10:
+            return [[x, y], [x - 10, y], [x - 20, y]]
+
+
 # Main logic
 while True:
+    game_over_flag = False
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
@@ -124,19 +139,6 @@ while True:
             if event.key == pygame.K_RIGHT:
                 if direction != "LEFT":
                     change_to = "RIGHT"
-            # Snake 2 controls
-            if event.key == ord("w"):
-                if direction2 != "DOWN":
-                    change_to2 = "UP"
-            if event.key == ord("s"):
-                if direction2 != "UP":
-                    change_to2 = "DOWN"
-            if event.key == ord("a"):
-                if direction2 != "RIGHT":
-                    change_to2 = "LEFT"
-            if event.key == ord("d"):
-                if direction2 != "LEFT":
-                    change_to2 = "RIGHT"
             # Esc -> Create event to quit the game
             if event.key == pygame.K_ESCAPE:
                 pygame.event.post(pygame.event.Event(pygame.QUIT))
@@ -151,15 +153,6 @@ while True:
     if change_to == "RIGHT" and direction != "LEFT":
         direction = "RIGHT"
 
-    if change_to2 == "UP" and direction2 != "DOWN":
-        direction2 = "UP"
-    if change_to2 == "DOWN" and direction2 != "UP":
-        direction2 = "DOWN"
-    if change_to2 == "LEFT" and direction2 != "RIGHT":
-        direction2 = "LEFT"
-    if change_to2 == "RIGHT" and direction2 != "LEFT":
-        direction2 = "RIGHT"
-
     # Moving the snake 1
     if direction == "UP":
         snake_pos[0][1] -= 10
@@ -170,7 +163,8 @@ while True:
     if direction == "RIGHT":
         snake_pos[0][0] += 10
 
-    # Moving the snake 2
+    # AI controls snake 2
+    direction2 = ai_move(snake2_pos, food_pos)
     if direction2 == "UP":
         snake2_pos[0][1] -= 10
     if direction2 == "DOWN":
@@ -189,12 +183,12 @@ while True:
         snake_body.pop()
 
     # Snake 2 body growing mechanism
-    snake2_body.insert(0, list(snake2_pos[0]))
     if snake2_pos[0][0] == food_pos[0] and snake2_pos[0][1] == food_pos[1]:
         score2 += 1
         food_spawn = False
     else:
         snake2_body.pop()
+    snake2_body.insert(0, list(snake2_pos[0]))
 
     # Spawning food on the screen
     if not food_spawn:
@@ -218,6 +212,7 @@ while True:
     pygame.draw.rect(game_window, white, pygame.Rect(food_pos[0], food_pos[1], 10, 10))
 
     # Game Over conditions
+    #  Game Over conditions
     # Snake 1 out of bounds
     if (
         snake_pos[0][0] < 0
@@ -225,31 +220,66 @@ while True:
         or snake_pos[0][1] < 0
         or snake_pos[0][1] > frame_size_y - 10
     ):
-        game_over()
-    # Snake 2 out of bounds
-    if (
-        snake2_pos[0][0] < 0
-        or snake2_pos[0][0] > frame_size_x - 10
-        or snake2_pos[0][1] < 0
-        or snake2_pos[0][1] > frame_size_y - 10
-    ):
-        game_over()
+        game_over_flag = game_over()
     # Snake 1 touching its own body
     for block in snake_body[1:]:
         if snake_pos[0][0] == block[0] and snake_pos[0][1] == block[1]:
-            game_over()
-    # Snake 2 touching its own body
-    for block in snake2_body[1:]:
-        if snake2_pos[0][0] == block[0] and snake2_pos[0][1] == block[1]:
-            game_over()
+            game_over_flag = game_over()
     # Snake 1 touching Snake 2 body
     for block in snake2_body:
         if snake_pos[0][0] == block[0] and snake_pos[0][1] == block[1]:
-            game_over()
-    # Snake 2 touching Snake 1 body
-    for block in snake_body:
-        if snake2_pos[0][0] == block[0] and snake2_pos[0][1] == block[1]:
-            game_over()
+            game_over_flag = game_over()
+    # Snakes touching each other
+    if snake_pos[0] == snake2_pos[0]:
+        game_over_flag = game_over()
+
+    if game_over_flag:
+        # Reset game variables
+        snake_pos = [[100, 50], [90, 50], [80, 50]]
+        snake_body = [[100, 50], [90, 50], [80, 50]]
+        snake2_pos = [
+            [frame_size_x - 100, frame_size_y - 50],
+            [frame_size_x - 90, frame_size_y - 50],
+            [frame_size_x - 80, frame_size_y - 50],
+        ]
+        snake2_body = [
+            [frame_size_x - 100, frame_size_y - 50],
+            [frame_size_x - 90, frame_size_y - 50],
+            [frame_size_x - 80, frame_size_y - 50],
+        ]
+        food_pos = [
+            random.randrange(1, (frame_size_x // 10)) * 10,
+            random.randrange(1, (frame_size_y // 10)) * 10,
+        ]
+        food_spawn = True
+        direction = "RIGHT"
+        change_to = direction
+        direction2 = "LEFT"
+        change_to2 = direction2
+        score = 0
+        score2 = 0
+        continue
+
+    # Snake 2 out of bounds or touching its own body or touching Snake 1 body
+    if (
+        (
+            snake2_pos[0][0] < 0
+            or snake2_pos[0][0] > frame_size_x - 10
+            or snake2_pos[0][1] < 0
+            or snake2_pos[0][1] > frame_size_y - 10
+        )
+        or any(
+            block[0] == snake2_pos[0][0] and block[1] == snake2_pos[0][1]
+            for block in snake2_body[1:]
+        )
+        or any(
+            block[0] == snake2_pos[0][0] and block[1] == snake2_pos[0][1]
+            for block in snake_body
+        )
+    ):
+        score2 = 0
+        snake2_pos = reset_snake2(snake_pos)
+        snake2_body = [list(snake2_pos[0])]
 
     show_score(1, white, "consolas", 20)
     # Refresh game screen
