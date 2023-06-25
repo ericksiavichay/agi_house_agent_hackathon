@@ -1,6 +1,40 @@
+from importlib import reload
+import threading
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
+# Import your control logic module
+import control
+
+control_reload_flag = False
+
+class FileChangeHandler(FileSystemEventHandler):
+    def on_modified(self, event):
+        global control_reload_flag
+        print(f'File {event.src_path} has been modified')
+        if event.src_path.endswith('control.py'):
+            control_reload_flag = True
+
+observer = Observer()
+event_handler = FileChangeHandler()
+# If your control.py is not in the same directory, adjust this path
+observer.schedule(event_handler, path='.', recursive=False)
+observer.start()
+
+def stop_observer():
+    observer.stop()
+    observer.join()
+
+import atexit
+atexit.register(stop_observer)
+
+# Modify your game control logic
+
+## --------------------------------------------------------------------------------
+
 import pygame, sys, time, random
 
-difficulty = 25 # fps
+difficulty = 5 # fps
 
 # Window size
 frame_size_x = 720
@@ -75,26 +109,41 @@ def show_score(choice, color, font, size):
     # pygame.display.flip()
 
 
-# Main logic
 while True:
+    global control
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
-        # Whenever a key is pressed down
         elif event.type == pygame.KEYDOWN:
-            # W -> Up; S -> Down; A -> Left; D -> Right
-            if event.key == pygame.K_UP or event.key == ord('w'):
-                change_to = 'UP'
-            if event.key == pygame.K_DOWN or event.key == ord('s'):
-                change_to = 'DOWN'
-            if event.key == pygame.K_LEFT or event.key == ord('a'):
-                change_to = 'LEFT'
-            if event.key == pygame.K_RIGHT or event.key == ord('d'):
-                change_to = 'RIGHT'
-            # Esc -> Create event to quit the game
             if event.key == pygame.K_ESCAPE:
                 pygame.event.post(pygame.event.Event(pygame.QUIT))
+
+    if control_reload_flag:
+        control = reload(control)
+        control_reload_flag = False
+
+    # Get direction from control logic
+    change_to = control.get_direction()
+    
+    # for event in pygame.event.get():
+    #     if event.type == pygame.QUIT:
+    #         pygame.quit()
+    #         sys.exit()
+    #     # Whenever a key is pressed down
+    #     elif event.type == pygame.KEYDOWN:
+    #         # W -> Up; S -> Down; A -> Left; D -> Right
+    #         if event.key == pygame.K_UP or event.key == ord('w'):
+    #             change_to = 'UP'
+    #         if event.key == pygame.K_DOWN or event.key == ord('s'):
+    #             change_to = 'DOWN'
+    #         if event.key == pygame.K_LEFT or event.key == ord('a'):
+    #             change_to = 'LEFT'
+    #         if event.key == pygame.K_RIGHT or event.key == ord('d'):
+    #             change_to = 'RIGHT'
+    #         # Esc -> Create event to quit the game
+    #         if event.key == pygame.K_ESCAPE:
+    #             pygame.event.post(pygame.event.Event(pygame.QUIT))
 
     # Making sure the snake cannot move in the opposite direction instantaneously
     if change_to == 'UP' and direction != 'DOWN':
